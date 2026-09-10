@@ -647,12 +647,23 @@ var initialIncidentForm = {
   tipo_error: "CONTENIDO",
   observacion: ""
 };
+var initialIncidentHistoryFilters = {
+  dateFrom: "",
+  dateTo: "",
+  responsible: "",
+  taskId: "",
+  shift: "",
+  errorType: "",
+  storeId: "",
+  search: ""
+};
 export function IncidentDashboard({ user }) {
   const incidentDraftKey = `incident-draft:${user?.id || "admin"}`;
   const [form, setForm] = useSessionState(`${incidentDraftKey}:form`, initialIncidentForm);
   const [status, setStatus] = useState(null);
   const [saving, setSaving] = useState(false);
   const [editingId, setEditingId] = useSessionState(`${incidentDraftKey}:editing-id`, null);
+  const [historyFilters, setHistoryFilters] = useSessionState(`${incidentDraftKey}:history-filters`, initialIncidentHistoryFilters);
   const { data, loading, error, reload } = useAsyncData(
     loadIncidentContext,
     [user?.id],
@@ -669,6 +680,9 @@ export function IncidentDashboard({ user }) {
   );
   function updateForm(changes) {
     setForm((current) => ({ ...current, ...changes }));
+  }
+  function updateHistoryFilters(changes) {
+    setHistoryFilters((current) => ({ ...current, ...changes }));
   }
   function editIncident(incident) {
     const areaIncident = ["incidencia", "error"].includes(String(incident.turno || "").toLowerCase());
@@ -760,7 +774,59 @@ export function IncidentDashboard({ user }) {
       setSaving(false);
     }
   }
-  const rows = incidents.map((incident) => ({
+  const filteredIncidents = incidents.filter((incident) => {
+    const date = String(incident.fecha_error || "").slice(0, 10);
+    if (historyFilters.dateFrom && date < historyFilters.dateFrom) return false;
+    if (historyFilters.dateTo && date > historyFilters.dateTo) return false;
+    if (historyFilters.responsible) {
+      const [kind, id] = historyFilters.responsible.split(":");
+      if (kind === "user" && String(incident.usuario_id || "") !== id) return false;
+      if (kind === "area" && String(incident.area_id || "") !== id) return false;
+    }
+    if (historyFilters.taskId && String(incident.tarea_error_id || "") !== historyFilters.taskId) return false;
+    const shift = ["incidencia", "error"].includes(String(incident.turno || "").trim().toLowerCase())
+      ? "incidencia"
+      : String(incident.turno || "").trim().toLowerCase();
+    if (historyFilters.shift && shift !== historyFilters.shift) return false;
+    if (historyFilters.errorType && String(incident.tipo_error || "").trim().toUpperCase() !== historyFilters.errorType) return false;
+    if (historyFilters.storeId && String(incident.tienda_id || "") !== historyFilters.storeId) return false;
+    const search = normalizeText(historyFilters.search);
+    if (search) {
+      const searchable = normalizeText([
+        incident.numero_guia,
+        incident.numero_lote,
+        incident.observacion,
+        incident.usuario_nombre,
+        incident.area_nombre,
+        incident.tarea_nombre,
+        incident.tienda_nombre
+      ].filter(Boolean).join(" "));
+      if (!searchable.includes(search)) return false;
+    }
+    return true;
+  });
+  const responsibleOptions = [
+    { value: "", label: "Todos" },
+    ...workers.map((worker) => ({ value: `user:${worker.id}`, label: worker.nombre || worker.email || `Usuario ${worker.id}` })),
+    ...areas.map((area) => ({ value: `area:${area.id}`, label: `${area.nombre} (área)` }))
+  ];
+  const historyFiltersView = (
+    <>
+      <div className="toolbar incident-history-filters">
+        <TextInput label="Fecha desde" type="date" value={historyFilters.dateFrom} max={historyFilters.dateTo || undefined} onChange={(dateFrom) => updateHistoryFilters({ dateFrom })} />
+        <TextInput label="Fecha hasta" type="date" value={historyFilters.dateTo} min={historyFilters.dateFrom || undefined} max={todayLimaISO()} onChange={(dateTo) => updateHistoryFilters({ dateTo })} />
+        <SelectInput label="Usuario o área" value={historyFilters.responsible} onChange={(responsible) => updateHistoryFilters({ responsible })} options={responsibleOptions} />
+        <SelectInput label="Tarea" value={historyFilters.taskId} onChange={(taskId) => updateHistoryFilters({ taskId })} options={[{ value: "", label: "Todas" }, ...tasks.map((task) => ({ value: String(task.id), label: getTaskTitle(task) || "Tarea sin nombre" }))]} />
+        <SelectInput label="Clasificación" value={historyFilters.shift} onChange={(shift) => updateHistoryFilters({ shift })} options={[{ value: "", label: "Todas" }, { value: "turno regular", label: "Turno regular" }, { value: "turno extra", label: "Turno extra" }, { value: "incidencia", label: "Incidencia" }]} />
+        <SelectInput label="Tipo de error" value={historyFilters.errorType} onChange={(errorType) => updateHistoryFilters({ errorType })} options={[{ value: "", label: "Todos" }, { value: "CONTENIDO", label: "CONTENIDO" }, { value: "LIBERADO", label: "LIBERADO" }]} />
+        <SelectInput label="Tienda" value={historyFilters.storeId} onChange={(storeId) => updateHistoryFilters({ storeId })} options={[{ value: "", label: "Todas" }, ...stores.map((store) => ({ value: String(store.id), label: store.nombre }))]} />
+        <TextInput label="Buscar" value={historyFilters.search} onChange={(search) => updateHistoryFilters({ search })} placeholder="Guía, lote u observación" />
+        <Button type="button" variant="secondary" onClick={() => setHistoryFilters(initialIncidentHistoryFilters)}>Limpiar filtros</Button>
+      </div>
+      <span className="muted">Mostrando {filteredIncidents.length} de {incidents.length} registros.</span>
+    </>
+  );
+  const rows = filteredIncidents.map((incident) => ({
     id: incident.id_error,
     Acción: /* @__PURE__ */ React.createElement(Button, {
       type: "button",
@@ -889,7 +955,7 @@ export function IncidentDashboard({ user }) {
         placeholder: "Detalle opcional"
       }
     ), /* @__PURE__ */ React.createElement("div", { className: "form-span form-actions" }, editingId ? /* @__PURE__ */ React.createElement(Button, { type: "button", variant: "danger", icon: Trash2, loading: saving, onClick: removeIncident }, "Eliminar error") : null, editingId ? /* @__PURE__ */ React.createElement(Button, { type: "button", variant: "secondary", disabled: saving, onClick: cancelEdit }, "Cancelar") : null, /* @__PURE__ */ React.createElement(Button, { type: "submit", icon: Save, loading: saving }, editingId ? "Guardar cambios" : "Guardar error")), status ? /* @__PURE__ */ React.createElement(Alert, { type: status.type }, status.message) : null)
-  ), /* @__PURE__ */ React.createElement(Panel, { title: "Historial de errores", eyebrow: "Usa Editar para corregir fecha o cualquier otro dato" }, /* @__PURE__ */ React.createElement(DataTable, { rows, columns: ["Acción", "Fecha", "Usuario / Área", "Tarea", "Número de guía", "Número de lote", "Tienda", "Tipo de error", "Observación", "Turno"], onRowClick: (row) => editIncident(row._incident), empty: "Todav\xEDa no hay errores registrados.", compact: true })));
+  ), /* @__PURE__ */ React.createElement(Panel, { title: "Historial de errores", eyebrow: "Usa Editar para corregir fecha o cualquier otro dato" }, historyFiltersView, /* @__PURE__ */ React.createElement(DataTable, { rows, columns: ["Acción", "Fecha", "Usuario / Área", "Tarea", "Número de guía", "Número de lote", "Tienda", "Tipo de error", "Observación", "Turno"], onRowClick: (row) => editIncident(row._incident), empty: "No hay errores para los filtros seleccionados.", compact: true })));
 }
 
 export function TimeRecordsHistory() {

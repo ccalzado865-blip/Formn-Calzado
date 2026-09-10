@@ -1758,7 +1758,7 @@ const DASHBOARD_HELP_SECTIONS = [
   {
     section: "Indicadores generales",
     items: [
-      { title: "Margen de error", text: "Registros de error del período sobre la cantidad de guías distintas registradas en ese mismo período." },
+      { title: "Margen de error", text: "Errores de turno regular o extra del período sobre la cantidad de guías distintas. Las incidencias por factores externos no se contabilizan." },
       { title: "Ausentismo / Tardanza", text: "Porcentaje de faltas o llegadas tarde sobre el total de asistencias marcadas en el período." },
       { title: "Permanencia promedio", text: "Meses promedio que duraron los trabajadores con un período laboral ya cerrado (con fecha de salida). No cuenta el tiempo en curso de quienes siguen activos, para que las contrataciones nuevas no bajen el promedio. No se ve afectado por ningún filtro." },
       { title: "Promedio de días por lote", text: "Días promedio que tardan los lotes en completarse. Los pendientes cuentan sus días contra hoy, así que suben solos cada día." },
@@ -2654,12 +2654,18 @@ export default function FootwearDashboard() {
       || (incidentAreaIds.length > 0 && incidentAreaIds.includes(Number(incident.areaId)))
     )
   ));
-  // Margen de error = total de registros de registro_errores del periodo
-  // filtrado sobre la cantidad de guias DISTINTAS (guias.codigo) registradas
-  // en ese mismo rango de fechas (mismo filtro de periodo que los errores).
+  // Las incidencias representan factores externos que afectan la operacion,
+  // pero no son errores del equipo. Permanecen disponibles en el historial y
+  // se excluyen de todos los indicadores y graficos de errores del dashboard.
+  const visibleErrorRecords = visibleIncidentRecords.filter((incident) => (
+    !["incidencia", "error"].includes(String(incident.shift || "").trim().toLowerCase())
+  ));
+  const externalIncidentCount = visibleIncidentRecords.length - visibleErrorRecords.length;
+  // Margen de error = errores de turno regular o extra del periodo filtrado
+  // sobre la cantidad de guias DISTINTAS registradas en el mismo rango.
   const filteredGuias = (dashboardData?.guias || []).filter((row) => matchesQualityDate(row.date));
   const totalGuideCount = new Set(filteredGuias.map((row) => row.code)).size;
-  const totalErrorCount = visibleIncidentRecords.length;
+  const totalErrorCount = visibleErrorRecords.length;
   const errorMargin = totalGuideCount ? (totalErrorCount / totalGuideCount) * 100 : 0;
   // Totales y promedio diario de guias/pares, respetando el mismo filtro de
   // periodo que el resto del tablero. El promedio solo cuenta dias con
@@ -2668,7 +2674,7 @@ export default function FootwearDashboard() {
   const guiasDistinctDays = new Set(filteredGuias.map((row) => row.date)).size;
   const guiasAvgPerDay = guiasDistinctDays ? totalGuideCount / guiasDistinctDays : 0;
   const paresAvgPerDay = guiasDistinctDays ? guiasTotalPares / guiasDistinctDays : 0;
-  const incidentCountByTask = visibleIncidentRecords.reduce((counts, incident) => {
+  const incidentCountByTask = visibleErrorRecords.reduce((counts, incident) => {
     const item = counts.get(incident.taskId) || { value: 0, lastDate: null };
     item.value += 1;
     if (!item.lastDate || incident.date > item.lastDate) item.lastDate = incident.date;
@@ -2681,7 +2687,7 @@ export default function FootwearDashboard() {
     value,
     lastDate
   })).sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
-  const filteredErrorsByOffender = [...visibleIncidentRecords.reduce((groups, incident) => {
+  const filteredErrorsByOffender = [...visibleErrorRecords.reduce((groups, incident) => {
     const offenderName = incident.offenderName || "Sin identificar";
     const offenderType = incident.offenderType || "Usuario/Área";
     const key = `${offenderName} (${offenderType})`;
@@ -2693,11 +2699,10 @@ export default function FootwearDashboard() {
   }, new Map()).values()].sort((a, b) => b.value - a.value);
   const filteredErrorsByTypeAndShift = [
     { value: "turno regular", label: "Turno regular" },
-    { value: "incidencia", aliases: ["incidencia", "error"], label: "Incidencia" },
     { value: "turno extra", label: "Turno extra" }
   ].map((shift) => {
     const acceptedValues = shift.aliases || [shift.value];
-    const rows = visibleIncidentRecords.filter((incident) => acceptedValues.includes(incident.shift));
+    const rows = visibleErrorRecords.filter((incident) => acceptedValues.includes(incident.shift));
     const primaryRows = rows.filter((incident) => incident.errorType === "CONTENIDO");
     const secondaryRows = rows.filter((incident) => incident.errorType === "LIBERADO");
     return {
@@ -2795,7 +2800,7 @@ export default function FootwearDashboard() {
     ? loteDurations.reduce((sum, days) => sum + days, 0) / loteDurations.length
     : 0;
   const filteredIndicators = [
-    { label: "Margen de error", detail: `${numberFormatter.format(totalErrorCount)} errores / ${numberFormatter.format(totalGuideCount)} guías distintas`, value: `${errorMargin.toFixed(2)}%` },
+    { label: "Margen de error", detail: `${numberFormatter.format(totalErrorCount)} errores / ${numberFormatter.format(totalGuideCount)} guías distintas${externalIncidentCount ? ` · ${numberFormatter.format(externalIncidentCount)} incidencias excluidas` : ""}`, value: `${errorMargin.toFixed(2)}%` },
     { label: "Ausentismo", detail: "Registro de asistencias", value: `${attendanceTotal ? ((attendanceTotals.absent / attendanceTotal) * 100).toFixed(2) : "0.00"}%` },
     { label: "Tardanza", detail: "Llegadas fuera de hora", value: `${attendanceTotal ? ((attendanceTotals.late / attendanceTotal) * 100).toFixed(2) : "0.00"}%` },
     { label: "Permanencia promedio", detail: `${tenure.workerCount} trabajador(es) con periodos laborales cerrados`, suffix: "meses", value: tenure.months.toFixed(2) },
@@ -3609,7 +3614,7 @@ export default function FootwearDashboard() {
                 <Card
                   id="pbi-errors-task"
                   title={`Distribución de Errores por Tarea · ${selectedMonthTitleLabel}`}
-                  meta={`${visibleIncidentRecords.length} registros de error`}
+                  meta={`${visibleErrorRecords.length} registros de error`}
                   className="pbi-card--chart pbi-card--quality-donut pbi-card--span-4"
                 >
                   <DonutChart
@@ -3625,12 +3630,12 @@ export default function FootwearDashboard() {
                 <Card
                   id="pbi-error-types"
                   title={`Errores por Turno y Tipo · ${selectedMonthTitleLabel}`}
-                  meta={`${visibleIncidentRecords.length} errores`}
+                  meta={`${visibleErrorRecords.length} errores`}
                   className="pbi-card--chart pbi-card--error-comparison pbi-card--span-8"
                 >
                   <ComparisonBars
                     data={filteredErrorsByTypeAndShift}
-                    ariaLabel="Comparación de errores de contenido y liberados en los tres turnos"
+                    ariaLabel="Comparación de errores de contenido y liberados en turnos regular y extra"
                     primaryLabel="CONTENIDO"
                     secondaryLabel="LIBERADO"
                     primaryColor="#0a4f87"
@@ -3653,7 +3658,7 @@ export default function FootwearDashboard() {
                 <Card
                   id="pbi-errors-worker"
                   title={`Errores por Usuario o Área · ${selectedMonthTitleLabel}`}
-                  meta={`${visibleIncidentRecords.length} errores`}
+                  meta={`${visibleErrorRecords.length} errores`}
                   className="pbi-card--chart pbi-card--quality-responsible pbi-card--tall pbi-card--span-12"
                 >
                   <HorizontalBars
