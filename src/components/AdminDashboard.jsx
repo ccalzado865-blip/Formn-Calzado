@@ -4904,6 +4904,7 @@ const GUIA_MESES = [
 const GUIA_DATE_HEADER = "ESTADO";
 const GUIA_CODE_HEADER = "TDA ORIGEN";
 const GUIA_NISSEI_HEADER = "CODIGO NISSEI";
+const GUIA_DESTINATION_HEADER = "TDA DESTINO";
 const GUIA_ITEM_BATCH_SIZE = 1000;
 
 function guiaColLetter(ref) {
@@ -4927,10 +4928,35 @@ function guiaLineFingerprint(text) {
   return hash.toString(16).padStart(16, "0");
 }
 
-function guiaExcelSerialToISODate(serial) {
-  const value = Number(serial);
-  if (!Number.isFinite(value)) return null;
-  const date = new Date(Date.UTC(1899, 11, 30) + value * 86400000);
+function guiaExcelDateToISODate(rawValue) {
+  const text = String(rawValue ?? "").trim();
+  if (!text) return null;
+
+  const textDate = text.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})$/);
+  if (textDate) {
+    const [, rawDay, rawMonth, rawYear] = textDate;
+    const year = Number(rawYear);
+    const month = Number(rawMonth);
+    const day = Number(rawDay);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
+    return `${rawYear}-${String(month).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+  }
+
+  const isoDate = text.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s].*)?$/);
+  if (isoDate) {
+    const [, rawYear, rawMonth, rawDay] = isoDate;
+    const year = Number(rawYear);
+    const month = Number(rawMonth);
+    const day = Number(rawDay);
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() + 1 !== month || date.getUTCDate() !== day) return null;
+    return `${rawYear}-${rawMonth}-${rawDay}`;
+  }
+
+  const serial = Number(text);
+  if (!Number.isFinite(serial)) return null;
+  const date = new Date(Date.UTC(1899, 11, 30) + serial * 86400000);
   if (Number.isNaN(date.getTime())) return null;
   const year = date.getUTCFullYear();
   const month = String(date.getUTCMonth() + 1).padStart(2, "0");
@@ -5026,8 +5052,9 @@ async function parseGuiasWorkbook(file) {
   const dateCol = headerCols.find((col) => headerByCol[col] === GUIA_DATE_HEADER);
   const codeCol = headerCols.find((col) => headerByCol[col] === GUIA_CODE_HEADER);
   const nisseiCol = headerCols.find((col) => headerByCol[col] === GUIA_NISSEI_HEADER);
-  if (!dateCol || !codeCol || !nisseiCol) {
-    throw new Error(`No se encontraron las columnas "${GUIA_DATE_HEADER}", "${GUIA_CODE_HEADER}" y "${GUIA_NISSEI_HEADER}" en el archivo.`);
+  const destinationCol = headerCols.find((col) => headerByCol[col] === GUIA_DESTINATION_HEADER);
+  if (!dateCol || !codeCol || (!nisseiCol && !destinationCol)) {
+    throw new Error(`No se encontraron las columnas "${GUIA_DATE_HEADER}", "${GUIA_CODE_HEADER}" y una columna de destino en el archivo.`);
   }
 
   const guidesByCode = new Map();
@@ -5039,9 +5066,10 @@ async function parseGuiasWorkbook(file) {
       valuesByCol[guiaColLetter(cell.ref)] = cellValue(cell);
     });
     const codigo = String(valuesByCol[codeCol] || "").trim();
-    const fecha = guiaExcelSerialToISODate(valuesByCol[dateCol]);
+    const fecha = guiaExcelDateToISODate(valuesByCol[dateCol]);
     const nissei = String(valuesByCol[nisseiCol] || "").trim().toUpperCase();
-    if (!codigo || !fecha || nissei !== "CD") continue;
+    const destination = String(valuesByCol[destinationCol] || "").trim().toUpperCase();
+    if (!codigo || !fecha || (nissei !== "CD" && destination !== "CD")) continue;
     if (!guidesByCode.has(codigo)) guidesByCode.set(codigo, fecha);
 
     const datos = {};
@@ -5145,7 +5173,7 @@ function GuiasPanel() {
       if (!guides.length) {
         setImportStatus({
           type: "error",
-          message: `No se encontraron guias validas en el archivo. Verifica que tenga las columnas "${GUIA_DATE_HEADER}", "${GUIA_CODE_HEADER}" y "${GUIA_NISSEI_HEADER}", y que existan filas con "${GUIA_NISSEI_HEADER}" = CD.`
+          message: `No se encontraron guias validas en el archivo. Verifica que tenga las columnas "${GUIA_DATE_HEADER}", "${GUIA_CODE_HEADER}" y filas con destino CD.`
         });
         return;
       }
@@ -5254,7 +5282,7 @@ function GuiasPanel() {
         <Alert>
           Sube el Excel de salidas (por ejemplo "Salidas 2026 enero.xlsx"). Cada guia se identifica por su codigo en
           la columna "{GUIA_CODE_HEADER}" y su fecha se toma de la columna "{GUIA_DATE_HEADER}". Solo se toman en
-          cuenta las filas donde "{GUIA_NISSEI_HEADER}" sea CD; el resto se ignora. Tambien se guarda
+          cuenta las filas donde "{GUIA_DESTINATION_HEADER}" o "{GUIA_NISSEI_HEADER}" sea CD; el resto se ignora. Tambien se guarda
           cada linea de producto de la guia, con todas las demas columnas del archivo. Puedes importar el mismo
           archivo mas de una vez o archivos de distintos meses: lo que ya existe no se sobrescribe ni se duplica,
           solo se agrega lo que falte.
