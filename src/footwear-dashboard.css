@@ -1556,11 +1556,20 @@ h2.pbi-section-heading {
 
 .pbi-kpi--indicator,
 .pbi-kpi--birthday {
-  min-height: 112px;
+  min-height: 76px;
   justify-items: start;
   align-content: center;
-  padding: 0.78rem;
+  gap: 0.14rem;
+  padding: 0.42rem 0.62rem;
   text-align: left;
+}
+
+.pbi-kpi--indicator .pbi-kpi-label {
+  font-size: clamp(0.72rem, 0.82vw, 0.9rem);
+}
+
+.pbi-kpi--indicator .pbi-kpi-value {
+  font-size: clamp(1.22rem, 1.65vw, 1.85rem);
 }
 
 .pbi-birthday-entry { display: grid; gap: 0.05rem; }
@@ -1587,8 +1596,8 @@ h2.pbi-section-heading {
 .pbi-kpi-detail {
   max-width: 100%;
   color: var(--pbi-muted);
-  font-size: 0.66rem;
-  line-height: 1.2;
+  font-size: 0.6rem;
+  line-height: 1.1;
   overflow-wrap: anywhere;
 }
 
@@ -4863,9 +4872,12 @@ button.pbi-legend-item:focus-visible,
     grid-template-columns: minmax(0, 1fr);
   }
 
-  .pbi-kpi-grid--activities,
-  .pbi-section-grid--indicators {
+  .pbi-kpi-grid--activities {
     grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .pbi-section-grid--indicators {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
   }
 
   .pbi-card,

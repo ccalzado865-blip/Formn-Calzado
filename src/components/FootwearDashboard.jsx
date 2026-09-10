@@ -2799,7 +2799,7 @@ export default function FootwearDashboard() {
     { label: "Ausentismo", detail: "Registro de asistencias", value: `${attendanceTotal ? ((attendanceTotals.absent / attendanceTotal) * 100).toFixed(2) : "0.00"}%` },
     { label: "Tardanza", detail: "Llegadas fuera de hora", value: `${attendanceTotal ? ((attendanceTotals.late / attendanceTotal) * 100).toFixed(2) : "0.00"}%` },
     { label: "Permanencia promedio", detail: `${tenure.workerCount} trabajador(es) con periodos laborales cerrados`, suffix: "meses", value: tenure.months.toFixed(2) },
-    { label: "Promedio de días por lote", detail: `${loteDurations.length} lote(s) · ${oneDecimalFormatter.format((dashboardData?.lotes || []).length ? dashboardData.lotes.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0) / dashboardData.lotes.length : 0)} pares promedio`, suffix: "días", value: avgLoteDurationDays.toFixed(1) }
+    { label: "Promedio de días por lote", detail: `${loteDurations.length} lote(s) · ${oneDecimalFormatter.format((dashboardData?.lotes || []).length ? dashboardData.lotes.reduce((sum, lot) => sum + Number(lot.quantity || 0), 0) / dashboardData.lotes.length : 0)} pares promedio`, suffix: "días", value: Math.round(avgLoteDurationDays).toLocaleString("es-PE") }
   ];
   // No se filtra por periodo ni por trabajador: el historial de amonestaciones
   // se ve completo siempre, sin que lo afecten los demas filtros del tablero.

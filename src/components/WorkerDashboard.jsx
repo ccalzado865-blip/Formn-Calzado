@@ -460,7 +460,7 @@ function RegisterActivity({ user }) {
         <Button variant="secondary" icon={Plus} onClick={addRecord} disabled={records.length >= taskKeys.length}>
           Agregar tarea
         </Button>
-        <Button variant="ghost" icon={Minus} onClick={removeRecord} disabled={records.length <= 1}>
+        <Button className="remove-task-button" variant="ghost" icon={Minus} onClick={removeRecord} disabled={records.length <= 1}>
           Quitar tarea
         </Button>
         <span>Registros a cargar: {records.length}</span>
@@ -973,7 +973,7 @@ function AllWorkersPaginatedHistory({ user }) {
         </>
       )}
     >
-      <div className="toolbar">
+      <div className="toolbar all-workers-history-filters">
         <SelectInput
           label="Operante"
           value={workerFilter}
@@ -1011,7 +1011,7 @@ function AllWorkersPaginatedHistory({ user }) {
       {error ? <Alert type="error">{friendlyError(error)}</Alert> : null}
       {loading && !rows.length ? <LoadingBlock /> : null}
       {!loading && !rows.length ? <Alert>No hay registros para los filtros seleccionados.</Alert> : null}
-      {rows.length ? <DataTable rows={rows} pageSize={0} /> : null}
+      {rows.length ? <DataTable rows={rows} pageSize={0} className="all-workers-history-table" /> : null}
       <TablePager page={page - 1} totalPages={totalPages} totalRows={Number(data.total || 0)} onChange={(nextPage) => setPage(nextPage + 1)} />
     </Panel>
   );
